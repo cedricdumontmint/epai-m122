@@ -1,0 +1,21 @@
+# Serveur de l'atelier du m122 (Bash, cron, PowerShell 7).
+# Aucun identifiant ni mot de passe : le compte « apprenti » n'a pas de mot de passe.
+#
+# Nom de projet explicite : sans lui, Compose prend le nom du dossier (« labs »), le même
+# que celui du m164 — les deux cours partageraient alors un même projet.
+name: m122
+
+services:
+  atelier:
+    build: .
+    image: m122-atelier:1
+    container_name: m122-atelier
+    hostname: atelier-srv
+    init: true
+    volumes:
+      - atelier-data:/srv/atelier        # l'atelier fictif (généré au 1er lancement)
+      - ./travaux:/home/apprenti/travaux # vos scripts, visibles depuis votre éditeur
+      - ../data:/home/apprenti/data:ro   # jeux de données du cours (lecture seule)
+
+volumes:
+  atelier-data:

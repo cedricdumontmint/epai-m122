@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# atelier-reset — remet l'atelier dans son état de départ (vide et régénère /srv/atelier).
+# Utile si vous avez supprimé ou abîmé des fichiers pendant un exercice.
+exec /usr/local/bin/atelier-seed --force
