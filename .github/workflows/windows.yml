@@ -6,29 +6,37 @@ on:
     branches: [sondes-windows]
   workflow_dispatch:
 jobs:
-  sondes:
+  pwsh7:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [pwsh, powershell]
     steps:
       - uses: actions/checkout@v4
-      - name: Sondes (${{ matrix.shell }})
-        shell: ${{ matrix.shell }}
-        run: ./windows-sondes/windows-checks.ps1 -Sortie "resultats-${{ matrix.shell }}.txt"
+      - name: Sondes PowerShell 7
+        shell: pwsh
+        run: ./windows-sondes/windows-checks.ps1 -Sortie resultats-pwsh7.txt
       - name: Résumé
         if: always()
         shell: pwsh
         run: |
-          if (Test-Path "resultats-${{ matrix.shell }}.txt") {
-            "### Résultats ${{ matrix.shell }}" | Out-File $env:GITHUB_STEP_SUMMARY -Append
-            '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append
-            Get-Content "resultats-${{ matrix.shell }}.txt" | Out-File $env:GITHUB_STEP_SUMMARY -Append
-            '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append
-          }
+          if (Test-Path resultats-pwsh7.txt) { Get-Content resultats-pwsh7.txt | Out-File $env:GITHUB_STEP_SUMMARY -Append }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: resultats-${{ matrix.shell }}
-          path: resultats-${{ matrix.shell }}.txt
+          name: resultats-pwsh7
+          path: resultats-pwsh7.txt
+  powershell51:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sondes Windows PowerShell 5.1
+        shell: powershell
+        run: ./windows-sondes/windows-checks.ps1 -Sortie resultats-ps51.txt
+      - name: Résumé
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path resultats-ps51.txt) { Get-Content resultats-ps51.txt | Out-File $env:GITHUB_STEP_SUMMARY -Append }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultats-ps51
+          path: resultats-ps51.txt
