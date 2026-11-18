@@ -2,8 +2,10 @@
 # Usage : ./windows-checks.ps1 -Sortie resultats.txt   (sous pwsh 7 ET powershell 5.1)
 param([string]$Sortie = 'resultats.txt')
 $ErrorActionPreference = 'Continue'
-Set-Content -Path $Sortie -Value "m122 - sondes Windows" -Encoding ascii
-function Note([string]$t) { Add-Content -Path $Sortie -Value $t -Encoding ascii; Write-Host $t }
+$Sortie = Join-Path (Get-Location) $Sortie
+$utf8 = New-Object System.Text.UTF8Encoding $false
+[IO.File]::WriteAllText($Sortie, "m122 - sondes Windows`r`n", $utf8)
+function Note([string]$t) { [IO.File]::AppendAllText($Sortie, $t + "`r`n", $utf8); Write-Host $t }
 function Sonde([string]$nom, [scriptblock]$code) {
     Note ""
     Note "== $nom"
@@ -24,13 +26,22 @@ Sonde 'encodage par defaut (octets ecrits)' {
     Set-Content $f1 'éa'; 'éa' | Out-File $f2; 'éa' > $f3; Set-Content $f4 'éa' -Encoding utf8
     foreach ($f in $f1,$f2,$f3,$f4) { $b = [IO.File]::ReadAllBytes($f); (Split-Path $f -Leaf) + ' : ' + (($b | Select-Object -First 6 | ForEach-Object { '{0:X2}' -f $_ }) -join ' ') }
 }
-Sonde 'Import-Csv avec BOM et en Windows-1252' {
-    $bom = Join-Path $tmp 'bom.csv'; [IO.File]::WriteAllText($bom, "nom;prenom`r`nMuller;Jörg`r`n", (New-Object Text.UTF8Encoding $true))
-    (Import-Csv $bom -Delimiter ';' | Format-List | Out-String)
-    (Get-Content $bom -TotalCount 1 | ForEach-Object { $_.ToCharArray() | Select-Object -First 3 | ForEach-Object { [int]$_ } }) -join ' '
-    $w = Join-Path $tmp 'w1252.csv'; [IO.File]::WriteAllBytes($w, [Text.Encoding]::GetEncoding(1252).GetBytes("nom;prenom`r`nMuller;Jörg`r`n"))
-    (Import-Csv $w -Delimiter ';' | Format-List | Out-String)
+Sonde 'Import-Csv avec BOM et en Windows-1252 (codes des caracteres)' {
+    function Codes($s) { ($s.ToCharArray() | ForEach-Object { [int]$_ }) -join ',' }
+    $bom = Join-Path $tmp 'bom.csv'; [IO.File]::WriteAllText($bom, "nom;prenom`r`nMuller;J$([char]0xF6)rg`r`n", (New-Object Text.UTF8Encoding $true))
+    $o = Import-Csv $bom -Delimiter ';'
+    'UTF-8 avec BOM : noms de colonnes = ' + (($o[0].PSObject.Properties.Name | ForEach-Object { '[' + (Codes $_) + ']' }) -join ' ') + ' ; prenom = ' + (Codes $o[0].prenom)
+    $o2 = Import-Csv $bom -Delimiter ';' -Encoding UTF8
+    'UTF-8 avec BOM, -Encoding UTF8 : colonnes = ' + (($o2[0].PSObject.Properties.Name | ForEach-Object { '[' + (Codes $_) + ']' }) -join ' ') + ' ; prenom = ' + (Codes $o2[0].prenom)
+    $w = Join-Path $tmp 'w1252.csv'; [IO.File]::WriteAllBytes($w, [Text.Encoding]::GetEncoding(1252).GetBytes("nom;prenom`r`nMuller;J$([char]0xF6)rg`r`n"))
+    $o3 = Import-Csv $w -Delimiter ';'
+    'Windows-1252 par defaut : prenom = ' + (Codes $o3[0].prenom) + ' (246 attendu pour o-trema)'
+    $o4 = Import-Csv $w -Delimiter ';' -Encoding UTF8
+    'Windows-1252 lu en UTF8 : prenom = ' + (Codes $o4[0].prenom)
+    $g = Get-Content $bom -TotalCount 1; 'Get-Content, premiere ligne : ' + (Codes $g)
 }
+Sonde 'journal : provenance de Write-EventLog' { Get-Command Write-EventLog | Select-Object Name, CommandType, Source, ModuleName | Format-List | Out-String; (Get-Module | Select-Object -ExpandProperty Name) -join ', '; Get-PSSession | Out-String }
+Sonde 'codes de retour de pwsh dans une tache sans console' { 'voir ScheduledTasks ci-dessus' }
 
 # Codes de sortie
 Sonde 'exit 3 : -File contre -Command' {
@@ -92,11 +103,15 @@ Sonde 'journal : Write-EventLog (5.1) / .NET EventLog' {
 
 # Comptes locaux
 Sonde 'comptes : New-LocalUser, net user, groupe, suppression' {
-    $mdp = ConvertTo-SecureString 'Sonde-Aleatoire-9x!' -AsPlainText -Force
-    New-LocalUser -Name 'm122sonde' -Password $mdp -FullName 'Sonde m122' -PasswordNeverExpires:$false | Out-String
+    $mdp = ConvertTo-SecureString 'Tz7#vQ2!kLp9wRx4' -AsPlainText -Force
+    New-LocalUser -Name 'm122sonde' -Password $mdp -FullName 'Compte essai' -Description 'sonde m122' | Format-Table Name, Enabled | Out-String
     net user m122sonde /logonpasswordchg:yes
-    net user m122sonde | Select-String 'Mot de passe|Password|Nom complet|Full Name' | Out-String
+    net user m122sonde
+    Add-LocalGroupMember -Group 'Users' -Member 'm122sonde'
+    (Get-LocalGroupMember -Group 'Users' | Where-Object Name -like '*m122sonde').Name
+    Get-LocalUser m122sonde | Select-Object Name, PasswordRequired, UserMayChangePassword, PasswordExpires, PasswordLastSet | Format-List | Out-String
     try { New-LocalUser -Name ('a' * 21) -NoPassword | Out-Null; 'nom de 21 signes : accepte' } catch { 'nom de 21 signes : ' + $_.Exception.Message }
+    try { New-LocalUser -Name 'm122faible' -Password (ConvertTo-SecureString 'abc' -AsPlainText -Force) | Out-Null; 'mot de passe abc : accepte' } catch { 'mot de passe abc : ' + $_.Exception.GetType().Name }
     Remove-LocalUser -Name 'm122sonde'
     'supprime : ' + (-not (Get-LocalUser -Name 'm122sonde' -ErrorAction SilentlyContinue))
 }
@@ -125,3 +140,4 @@ Sonde 'syntaxe des .ps1 du depot' {
 }
 Note ""
 Note "fin des sondes"
+exit 0
